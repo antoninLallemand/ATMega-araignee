@@ -10,8 +10,7 @@ CircularBuffer i2cBuffer;
 #define TOPSERVOPIN 5
 #define MEDIUMSERVOPIN 6
 #define BOTTOMSERVOPIN 9
-
-// byte frequencyDivision = 0x01;  //pwm frequency divided  by 1
+#define INTERRUPTPIN 8
 
 MoToServo topServo;
 MoToServo middleServo;
@@ -29,7 +28,6 @@ bool letNewSequence = false;
 bool stopSequence = false;
 bool sendActualAngles = false;
 uint8_t sendCounter = 0;
-bool sendSequenceState = false;
 unsigned long lastSemiSequence = 0;
 
 void servoMotion(){
@@ -82,6 +80,7 @@ void servoMotion(){
   }
   else if(nbOfSequence == 4){
     sequenceFinished = true;
+    digitalWrite(INTERRUPTPIN, 1); //set HIGH when sequence is finished
     startSequence = false;
     nbOfSequence++; //executed once
     // Serial.println();
@@ -101,17 +100,10 @@ void receiveEvent (int howMany){
     c = Wire.read();
     i2cBuffer.writeData(c);
   }
-  // delay(10);
-  // Wire.end(); // set interrupt bit (TWIE) to 0
-  // TWCR &= 0b11111110;
 }
 
 void requestEvent (){
-  if(sendSequenceState){
-    sendSequenceState = false;
-    Wire.write(sequenceFinished);
-  }
-  else if(sendActualAngles){
+  if(sendActualAngles){
     Wire.write(actualAngleArray[sendCounter]);
     sendCounter++;
     if(sendCounter == 3)
@@ -121,7 +113,6 @@ void requestEvent (){
 
 //------EXECUTION--------------------
 void setup() {
-  // TCCR1B = TCCR1B & 0b11111000 | frequencyDivision; //increase the PWM frequency to 31250Hz
   i2cBuffer.begin(100);
   Wire.begin(ADRESS);
   Serial.begin(115200);
@@ -140,6 +131,9 @@ void setup() {
   previousAngleArray[1] = 165;
   previousAngleArray[2] = 2;
 
+  pinMode(INTERRUPTPIN, OUTPUT);
+  digitalWrite(INTERRUPTPIN, 0);
+
 }
 
 void loop(){
@@ -149,11 +143,9 @@ void loop(){
     // delay(1);
     if(data > 0 && data<=181){ //&& readAngles){ //ajust received angles
       angleArray[i] = data-1;
+      digitalWrite(INTERRUPTPIN, 0); //set back to 0V when new angles are arriving
       // Serial.println(data-1);
       i++;
-    }
-    else if(data == 0xCC){ //rasp ask for atmega if the sequence is finished
-      sendSequenceState = true;
     }
     else if(data == 200){ //stop code (unused value for angles)
       stopSequence = true;
