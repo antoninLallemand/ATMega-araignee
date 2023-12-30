@@ -2,17 +2,19 @@
 // Contain 4 public functions
 // Author : Antonin Lallemand (2023)
 
-#ifndef CircularBuffer_h
-#define CircularBuffer_h
+#ifndef CircularBufferAL_h
+#define CircularBufferAL_h
+
+#include <stdint.h>
 
 const int bufferSize = 100;
 
-class CircularBuffer {
+class CircularBufferAL {
 public :
 
     /*!
     * \brief function to be implemented in the setup loop of the main code
-    * \param bufferSize maximum number of elements in the buffer
+    * \param bufferSize maximum number of elements in the buffer (default value = 100)
     */
     void begin(uint16_t bufferSize);
 
@@ -25,7 +27,7 @@ public :
     /*!
     * \brief return the oldest unread value
     */
-    int readData();
+    int32_t readData();
 
     /*!
     * \brief return true if the buffer is empty

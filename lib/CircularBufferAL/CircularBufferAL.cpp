@@ -1,19 +1,18 @@
-#include "CircularBuffer.h"
-#include <stdint.h>
+#include "CircularBufferAL.h"
 
 
-void CircularBuffer :: begin(uint16_t bufferSize){
+void CircularBufferAL :: begin(uint16_t bufferSize){
     CircularBufferSize = bufferSize;    //set buffer size
 }
 
-void CircularBuffer :: writeData(int32_t data) {
+void CircularBufferAL :: writeData(int32_t data) {
     circularBuffer[writeIndex] = data;  //add an element
     if(writeIndex == CircularBufferSize-1) IndexScale = true; //when writing cursor come back to 0
     writeIndex = (writeIndex + 1) % CircularBufferSize; //increment write cursor for next data
     if(IndexScale && writeIndex > readIndex) IndexScale = false; //when writing cursor overtakes reading cursor
 }
 
-int CircularBuffer :: readData() {
+int32_t CircularBufferAL :: readData() {
     int32_t data = circularBuffer[readIndex];   //read oldest unread element
     if(readIndex == CircularBufferSize-1) IndexScale = false; //when reading cursor come back to 0
     if(readIndex < writeIndex || IndexScale) //increment only if buffer is'nt empty
@@ -21,7 +20,7 @@ int CircularBuffer :: readData() {
     return data;
 }
 
-bool CircularBuffer :: isEmpty(){
+bool CircularBufferAL :: isEmpty(){
     return readIndex >= writeIndex && !IndexScale; //if reading and writing cursor are equal in the same round
 }
 

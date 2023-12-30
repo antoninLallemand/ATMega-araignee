@@ -1,109 +1,116 @@
+/*
+"Une araignée" project UTBM autumn 2023
+This code is used in each ATmega328p (each leg)
+Author : Antonin Lallemand
+*/
+
 #include <Arduino.h>
 #include <Wire.h>
-#include <MobaTools.h>
-#include <CircularBuffer.h>
+#include <MobaTools.h>        //github : https://github.com/MicroBahner/MobaTools
+#include <CircularBufferAL.h> //github : https://github.com/antoninLallemand/CircularBuffer-library
 
-//------------ BUFFER ------------------------------
-CircularBuffer i2cBuffer;
+/*------------ BUFFER ---------------*/
 
-//---- SERVOS-------------------------
-#define TOPSERVOPIN 5
-#define MEDIUMSERVOPIN 6
-#define BOTTOMSERVOPIN 9
-#define INTERRUPTPIN 8
+CircularBufferAL i2cBuffer; //create a CircularBuffer instance
+
+/*------------ SERVOS --------------*/
+#define TOP_SERVO_PIN 5
+#define MEDIUM_SERVO_PIN 6
+#define BOTTOM_SERVO_PIN 9
+#define INTERRUPT_PIN 8
 
 MoToServo topServo;
 MoToServo middleServo;
 MoToServo bottomServo;
 
-byte angleArray[12];
-byte previousAngleArray[3] = {0,0,0}; //values of servo's angles when spider is turned off
-byte angleToDo[3];
-byte actualAngleArray[3];
-const int maxServoDurationTime = 4000; //defined in advance
-bool startSequence = false;
-bool sequenceFinished = false;  //in order to respond to raspberry
-uint8_t nbOfSequence = 0;
-bool letNewSequence = false;
-bool stopSequence = false;
-bool sendActualAngles = false;
-uint8_t sendCounter = 0;
-unsigned long lastSemiSequence = 0;
+byte angleArray[12];                    //received angles from Rasp (3*4)
+byte previousAngleArray[3] = {0,0,0};   //values of servo's angles when spider is turned off
+byte angleToDo[3];                      //gap between actual angle and command angle for each servo
+byte actualAngleArray[3];               //angles when a stop is received
+const int maxServoDurationTime = 4000;  //reference speed : duration for a 0-270° displacement
+bool startSequence = false;             //when angleArray is updated
+bool sequenceFinished = false;          //in order to respond to raspberry
+uint8_t nbOfSequence = 0;               //increment each sub-sequence
+bool letNewSequence = false;            //when a sub-sequence is finished
+bool stopSequence = false;              //when a stop is received
+bool sendActualAngles = false;          //when actualAngleArray is filled after a stop
+uint8_t sendCounter = 0;                //stop angles cursor 
 
+//Servo infinite loop function
 void servoMotion(){
 
   if(stopSequence){
     stopSequence = false;
-    letNewSequence = false;
+    letNewSequence = false;                             //stop running sequence
     startSequence = false;
     topServo.write(topServo.read());
-    middleServo.write(middleServo.read());
+    middleServo.write(middleServo.read());              //write reading value = stop movement
     bottomServo.write(bottomServo.read());
     actualAngleArray[0] = topServo.read();
-    actualAngleArray[1] = middleServo.read();
+    actualAngleArray[1] = middleServo.read();           //read every servos position and fill stop angles array
     actualAngleArray[2] = bottomServo.read();
-    for (int i=0; i<3; i++){
-      previousAngleArray[i] = actualAngleArray[i] + 1;
-    }
+    for (int i=0; i<3; i++)
+      previousAngleArray[i] = actualAngleArray[i] + 1;  //fill last angle position for future movement
+    sendActualAngles = true;                            //allow answer to raspberry
   }
-  else if(startSequence && nbOfSequence < 4){ //initialize servo speed and write angles
-    delay(10);
+
+  //initialize servo speed and write angles
+  else if(startSequence && nbOfSequence < 4){ //for each sub-sequence
+    // delay(10);
     startSequence = false;
-    uint8_t j = 3*nbOfSequence;
+    uint8_t j = 3*nbOfSequence;     //reading the 3 corrects angles in the array
     for(int i=0; i<3; i++){
-      angleToDo[i] = abs(angleArray[j+i] - previousAngleArray[i]);
-      previousAngleArray[i] = angleArray[j+i];
+      angleToDo[i] = abs(angleArray[j+i] - previousAngleArray[i]);  //calcul angle to do during the sub-sequence for 3 servos
+      previousAngleArray[i] = angleArray[j+i];  //for next sub-sequence
     }
-    float timeOfSequence = maxServoDurationTime/180*max(max(angleToDo[0],angleToDo[1]),angleToDo[2]);//estimation of time taking into account max time duration
+    float timeOfSequence = maxServoDurationTime/180*max(max(angleToDo[0],angleToDo[1]),angleToDo[2]); //estimation of time using biggest movement
     float impulsionWith[3];
-    float numberOfSegments = timeOfSequence/20; 
+    float numberOfSegments = timeOfSequence/20; //number of command update during the movement
     for(int i=0; i<3; i++){
-      impulsionWith[i] = 2*2000/180*angleToDo[i]/numberOfSegments; //every 20ms, impulsion will be extend of 0.5 * implusionWith us
+      impulsionWith[i] = 2*2000/180*angleToDo[i]/numberOfSegments; //every 20ms, impulsion will be extend of 0.5 * implusionWith (us)
     }
-    // Serial.println(impulsionWith[0]);
     topServo.setSpeed(impulsionWith[0]);
-    middleServo.setSpeed(impulsionWith[1]);
+    middleServo.setSpeed(impulsionWith[1]);   //set speed of 3 servos in order to finish at the same time
     bottomServo.setSpeed(impulsionWith[2]);
     topServo.write(angleArray[j+0]);
-    middleServo.write(angleArray[j+1]);
+    middleServo.write(angleArray[j+1]);       //command servos
     bottomServo.write(angleArray[j+2]);
     letNewSequence = true;
   }
-  // if(millis()-lastSemiSequence > 10){
+
+  //when sub-sequence is finished
   else if(letNewSequence && topServo.moving()==0 && middleServo.moving()==0 && bottomServo.moving()==0){
-    // delay(10);  //wait for hardware end
     startSequence = true;
-    nbOfSequence++;
+    nbOfSequence++;         //next sub-sequence
     letNewSequence = false;
-    lastSemiSequence = millis();
-    // Serial.println("semi");
   }
+  
+  //when sequence (4 sub-sequences) is finished
   else if(nbOfSequence == 4){
     sequenceFinished = true;
-    digitalWrite(INTERRUPTPIN, 1); //set HIGH when sequence is finished
+    digitalWrite(INTERRUPT_PIN, 1); //set HIGH when sequence is finished
     startSequence = false;
-    nbOfSequence++; //executed once
-    // Serial.println();
-    // Serial.println("complete");
+    nbOfSequence++; //permit to execute this function only once
   }
-  // }
+
 }
 
 //----- I2C COMM------------------
-#define ADRESS 0x09
+#define ADRESS 0x09   //slave adress
 int i = 0;
-// bool readAngles = false;
 
+//when Raspberry send data to slave
 void receiveEvent (int howMany){
   byte c;
   while(Wire.available()){
-    c = Wire.read();
-    i2cBuffer.writeData(c);
+    c = Wire.read();          //read I2C data
+    i2cBuffer.writeData(c);   //write reading data in the buffer
   }
 }
 
+//when Raspberry send a request to slave
 void requestEvent (){
-  if(sendActualAngles){
+  if(sendActualAngles){ //send stop angles
     Wire.write(actualAngleArray[sendCounter]);
     sendCounter++;
     if(sendCounter == 3)
@@ -113,49 +120,53 @@ void requestEvent (){
 
 //------EXECUTION--------------------
 void setup() {
+  //set buffer
   i2cBuffer.begin(100);
+
+  //set I2C
   Wire.begin(ADRESS);
-  Serial.begin(115200);
-  Serial.println("hi");
   Wire.onRequest(requestEvent);
   Wire.onReceive(receiveEvent);
 
-  topServo.attach(TOPSERVOPIN);
-  middleServo.attach(MEDIUMSERVOPIN);
-  bottomServo.attach(BOTTOMSERVOPIN);
+  //set servos pins
+  topServo.attach(TOP_SERVO_PIN);
+  middleServo.attach(MEDIUM_SERVO_PIN);
+  bottomServo.attach(BOTTOM_SERVO_PIN);
+
   //set initial angles
   topServo.write(90);  //0
-  middleServo.write(155); //
+  middleServo.write(155); //165
   bottomServo.write(2); //
   previousAngleArray[0] = 90;
-  previousAngleArray[1] = 165;
+  previousAngleArray[1] = 155;
   previousAngleArray[2] = 2;
 
-  pinMode(INTERRUPTPIN, OUTPUT);
-  digitalWrite(INTERRUPTPIN, 0);
+  //set interrupt pin
+  pinMode(INTERRUPT_PIN, OUTPUT);
+  digitalWrite(INTERRUPT_PIN, 0);
 
+  Serial.begin(115200);
+  Serial.println("hi");
 }
 
 void loop(){
-  //-------- FILL ANGLE ARRAY --------------
+  //-------- INCOMMING DATA INTERPRETATION --------------
   if(!i2cBuffer.isEmpty()) {
-    byte data = i2cBuffer.readData();
-    // delay(1);
-    if(data > 0 && data<=181){ //&& readAngles){ //ajust received angles
+    byte data = i2cBuffer.readData(); //read buffer
+    if(data > 0 && data<=181){  //if received data is an angle
       angleArray[i] = data-1;
-      digitalWrite(INTERRUPTPIN, 0); //set back to 0V when new angles are arriving
-      // Serial.println(data-1);
+      digitalWrite(INTERRUPT_PIN, 0); //set back to 0V when new angles are arriving
       i++;
     }
-    else if(data == 200){ //stop code (unused value for angles)
+    else if(data == 0xC8) //stop code (unused value for angles)
       stopSequence = true;
-    }
+    
     else if(data == 0xCA) //send actual angles after a stop
       sendActualAngles = true;
+
+    //when every angles are received, start sequence
     if (i == 12){
-      i = 0;
-      // Serial.println("all data");
-      // Serial.println();      
+      i = 0;    
       startSequence = true;
       nbOfSequence = 0;
       sequenceFinished = false;
