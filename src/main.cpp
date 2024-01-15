@@ -7,7 +7,7 @@ Author : Antonin Lallemand
 #include <Arduino.h>
 #include <Wire.h>
 #include <MobaTools.h>        //github : https://github.com/MicroBahner/MobaTools
-#include <CircularBufferAL.h> //github : https://github.com/antoninLallemand/CircularBuffer-library
+#include <CircularBufferAL.h> //github : https://github.com/antoninLallemand/CircularBuffer-library (simplified version is already included)
 
 /*------------ BUFFER ---------------*/
 
@@ -120,9 +120,6 @@ void requestEvent (){
 
 //------EXECUTION--------------------
 void setup() {
-  //set buffer
-  i2cBuffer.begin(100);
-
   //set I2C
   Wire.begin(ADRESS);
   Wire.onRequest(requestEvent);

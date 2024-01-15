@@ -13,12 +13,6 @@ class CircularBufferAL {
 public :
 
     /*!
-    * \brief function to be implemented in the setup loop of the main code
-    * \param bufferSize maximum number of elements in the buffer (default value = 100)
-    */
-    void begin(uint16_t bufferSize);
-
-    /*!
     * \brief adding an element in the buffer
     * \param data data to add in the buffer
     */
@@ -35,11 +29,10 @@ public :
     bool isEmpty();
 
 private :
-  int32_t circularBuffer[bufferSize];
+  static const uint16_t CircularBufferSize = 100; //default value
+  int32_t circularBuffer[CircularBufferSize];
   uint16_t writeIndex = 0;
   uint16_t readIndex = 0;
-  uint16_t CircularBufferSize = 100; //default value
-  bool IndexScale = false; //true if writeIndex has one round advance on readIndex
 };
 
 #endif
